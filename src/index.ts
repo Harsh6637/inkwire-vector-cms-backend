@@ -14,7 +14,7 @@ app.use(cors({
   origin: [
     'http://localhost:3000',  // localhost development
     'http://127.0.0.1:3000',
-    'https://inkwire-vector-cms.vercel.app/' //Vercel deployment
+    'https://inkwire-vector-cms.vercel.app' //Vercel deployment
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
