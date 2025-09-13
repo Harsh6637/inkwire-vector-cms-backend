@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "Backend server for inkwire-vector-cms-frontend",
   "main": "index.js",
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "dev": "nodemon --watch \"src/**/*.ts\" --exec \"ts-node\" src/index.ts",
     "build": "tsc",

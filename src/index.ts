@@ -10,15 +10,16 @@ import searchRoutes from './routes/search';
 
 const app = express();
 
+// CORS setup — add all frontend origins you need
 app.use(cors({
   origin: [
-    'http://localhost:3000',  // localhost development
+    'http://localhost:3000',
     'http://127.0.0.1:3000',
-    'https://inkwire-vector-cms.vercel.app' //Vercel deployment
+    'https://inkwire-vector-cms.vercel.app' // Vercel frontend
   ],
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  methods: ['GET','POST','PUT','DELETE','PATCH','OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
 app.use(express.json({ limit: '10mb' }));
@@ -26,13 +27,14 @@ app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 const upload = multer({
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit
-    fieldSize: 10 * 1024 * 1024  // 10MB field size limit
+    fileSize: 10 * 1024 * 1024, // 10MB
+    fieldSize: 10 * 1024 * 1024
   }
 });
 
 const API_VERSION = '/api/v1';
 
+// Health check root
 app.get('/', (req: Request, res: Response) => {
   res.send('Inkwire Backend is running!');
 });
@@ -42,12 +44,12 @@ app.use(`${API_VERSION}/auth`, authRoutes);
 app.use(`${API_VERSION}/resources`, upload.none(), resourceRoutes);
 app.use(`${API_VERSION}/search`, searchRoutes);
 
-// Health check route
+// Health check
 app.get(`${API_VERSION}/health`, (req: Request, res: Response) => {
   res.json({ status: 'ok', message: 'Backend is running!' });
 });
 
-// Database check route, Only for the testing purposes
+// Database check route (testing only)
 app.get(`${API_VERSION}/db-check`, async (req: Request, res: Response) => {
   try {
     const extCheck = await db.query(`SELECT extname FROM pg_extension WHERE extname = 'vector';`);
@@ -61,7 +63,7 @@ app.get(`${API_VERSION}/db-check`, async (req: Request, res: Response) => {
       status: 'ok',
       db_check: {
         pgvector_installed: extCheck.rows.length > 0,
-        tables_present: tableCheck.rows.map(r => r.table_name),
+        tables_present: tableCheck.rows.map((r: any) => r.table_name),
       },
     });
   } catch (err: any) {
@@ -100,17 +102,15 @@ app.use((req: Request, res: Response) => {
   });
 });
 
-// Local development server
-const PORT = process.env.PORT;
+// LOCAL SERVER START ONLY
 
-// Only start the server when running locally
-if (require.main === module || process.env.NODE_ENV !== 'production') {
+if (require.main === module) {
+  const PORT = process.env.PORT || 3001;
   app.listen(PORT, () => {
     console.log(`Server running locally at http://localhost:${PORT}`);
   });
 }
 
-export default app;
-
-// Serverless handler for Vercel
+// SERVERLESS HANDLER FOR VERCEL
 export const handler = serverless(app);
+export default app;

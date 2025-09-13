@@ -61,7 +61,7 @@ export const getResources = async (req: Request, res: Response) => {
       ORDER BY created_at DESC
     `);
 
-    const transformedResults = result.rows.map(row => ({
+    const transformedResults = result.rows.map((row: any) => ({
       id: row.id,
       name: row.name,
       metadata: row.metadata,
