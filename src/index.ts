@@ -10,10 +10,9 @@ import searchRoutes from './routes/search';
 
 const app = express();
 
-// CORS setup — add all frontend origins you need
 app.use(cors({
   origin: [
-    'http://localhost:3000',
+    'http://localhost:3000', //localhost
     'http://127.0.0.1:3000',
     'https://inkwire-vector-cms.vercel.app' // Vercel frontend
   ],
@@ -34,9 +33,9 @@ const upload = multer({
 
 const API_VERSION = '/api/v1';
 
-// Health check root
+// HomePage
 app.get('/', (req: Request, res: Response) => {
-  res.send('Inkwire Backend is running!');
+  res.send('Inkwire Vector CMS Backend is running!');
 });
 
 // API routes
@@ -63,7 +62,7 @@ app.get(`${API_VERSION}/db-check`, async (req: Request, res: Response) => {
       status: 'ok',
       db_check: {
         pgvector_installed: extCheck.rows.length > 0,
-        tables_present: tableCheck.rows.map((r: any) => r.table_name),
+        tables_present: tableCheck.rows.map(r => r.table_name),
       },
     });
   } catch (err: any) {
