@@ -65,6 +65,21 @@ app.get(`${API_VERSION}/health`, (req: Request, res: Response) => {
 // Database check route (testing only)
 app.get(`${API_VERSION}/db-check`, async (req: Request, res: Response) => {
   try {
+    const rawHost = process.env.DATABASE_URL?.match(/@(.+?):/)?.[1];
+    if (!rawHost) {
+      return res.status(400).json({ error: 'Invalid DATABASE_URL format' });
+    }
+
+    // DNS debug: check IPv4 resolution
+    const dns = await import('dns/promises');
+    let ipv4Addresses;
+    try {
+      ipv4Addresses = await dns.resolve4(rawHost);
+    } catch (dnsErr) {
+      console.warn('DNS IPv4 resolution failed:', dnsErr.message);
+    }
+
+    // Proceed with DB checks
     const extCheck = await db.query(`SELECT extname FROM pg_extension WHERE extname = 'vector';`);
     const tableCheck = await db.query(`
       SELECT table_name
@@ -74,6 +89,10 @@ app.get(`${API_VERSION}/db-check`, async (req: Request, res: Response) => {
 
     res.json({
       status: 'ok',
+      dns_debug: {
+        host: rawHost,
+        ipv4Addresses: ipv4Addresses || 'No IPv4 address found',
+      },
       db_check: {
         pgvector_installed: extCheck.rows.length > 0,
         tables_present: tableCheck.rows.map((r: any) => r.table_name),
@@ -83,6 +102,7 @@ app.get(`${API_VERSION}/db-check`, async (req: Request, res: Response) => {
     res.status(500).json({ status: 'error', message: err.message });
   }
 });
+
 
 // Global error handler
 app.use((err: any, req: Request, res: Response, next: any) => {
