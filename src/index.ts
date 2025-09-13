@@ -39,12 +39,11 @@ app.get('/', (req: Request, res: Response) => {
   res.send('Inkwire Backend is running!');
 });
 
-app.get('${API_VERSION}/test-dns', async (req: Request, res: Response) => {
+app.get(`${API_VERSION}/test-dns`, async (req: Request, res: Response) => {
   try {
     const host = process.env.DATABASE_URL?.match(/@(.+?):/)?.[1];
     if (!host) return res.status(400).json({ error: 'DATABASE_URL missing or invalid' });
 
-    // Use Node's dns.promises API
     const dns = await import('dns/promises');
     const addresses = await dns.lookup(host);
     res.json({ host, addresses });
