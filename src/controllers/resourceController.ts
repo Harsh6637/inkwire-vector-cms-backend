@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import db from '../lib/db';
-import { processTextAndInsertChunks } from '../utils/chunkEmbed';
+import { processTextAndInsertChunks, deleteResourceChunks } from '../utils/chunkEmbed';
 
 export const createResource = async (req: Request, res: Response) => {
 try {
@@ -22,18 +22,25 @@ metadata = typeof req.body.metadata === 'string'
     }
 
     const user = (req as any).user;
-    // Insert the resource with text content
+
+    // Insert the resource first
     const resourceResult = await db.query(
-        'INSERT INTO resources (name, metadata, text_content, user_id) VALUES ($1, $2, $3, $4) RETURNING id',
-        [name.trim(), metadata, text || '', user.id]
+      'INSERT INTO resources (name, metadata, text_content, user_id) VALUES ($1, $2, $3, $4) RETURNING id',
+      [name.trim(), metadata, text || '', user.id]
     );
 
     const resourceId = resourceResult.rows[0].id;
 
-    // Process text: chunk, embed, and insert into DB (when OpenAI is configured)
-    // if (text && text.trim()) {
-    //   await processTextAndInsertChunks(resourceId, text);
-    // }
+    // Process with raw data extraction
+    const { processResourceWithRawData } = require('../utils/rawDataProcessor');
+
+    try {
+      await processResourceWithRawData(resourceId, text, metadata);
+      console.log(`Successfully processed resource ${resourceId}`);
+    } catch (chunkError) {
+      console.error(`Processing failed for resource ${resourceId}:`, chunkError);
+      // Don't fail the entire request if processing fails
+    }
 
     res.status(201).json({
       message: 'Resource created successfully',
@@ -88,8 +95,14 @@ export const deleteResource = async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'Invalid resource ID' });
     }
 
-    // First, delete associated chunks (when chunks table is ready)
-    // await db.query('DELETE FROM chunks WHERE resource_id = $1', [id]);
+    // First, delete associated chunks
+    try {
+      await deleteResourceChunks(parseInt(id));
+      console.log(`Deleted chunks for resource ${id}`);
+    } catch (chunkError) {
+      console.error(`Error deleting chunks for resource ${id}:`, chunkError);
+      // Continue with resource deletion even if chunk deletion fails
+    }
 
     // Then delete the resource
     const result = await db.query('DELETE FROM resources WHERE id = $1 RETURNING id, name', [id]);

@@ -4,10 +4,10 @@
   "description": "Backend server for inkwire-vector-cms-frontend",
   "main": "index.js",
   "engines": {
-    "node": "20.x"
+    "node": ">=20.x"
   },
   "scripts": {
-    "dev": "nodemon --watch \"src/**/*.ts\" --exec \"ts-node\" src/index.ts",
+    "dev": "free3001 && nodemon --watch \"src/**/*.ts\" --exec \"ts-node\" src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
     "vercel-build": "echo 'Vercel build complete'"
@@ -19,12 +19,17 @@
     "cors": "^2.8.5",
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
+    "fs": "^0.0.1-security",
     "jsonwebtoken": "^9.0.2",
+    "mammoth": "^1.10.0",
     "multer": "^2.0.2",
     "openai": "^5.20.2",
+    "pdf-parse": "^1.1.1",
+    "pdf2pic": "^3.2.0",
     "pg": "^8.16.3",
     "pgvector": "^0.2.1",
-    "serverless-http": "^4.0.0"
+    "serverless-http": "^4.0.0",
+    "tesseract.js": "^6.0.1"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
@@ -33,6 +38,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/multer": "^2.0.0",
     "@types/node": "^24.3.3",
+    "@types/pdf-parse": "^1.1.5",
     "@types/pg": "^8.15.5",
     "nodemon": "^3.1.10",
     "ts-node": "^10.9.2",
