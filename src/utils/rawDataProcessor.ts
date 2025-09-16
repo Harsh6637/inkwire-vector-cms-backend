@@ -3,6 +3,9 @@ import pdfParse from 'pdf-parse';
 
 function normalizeText(raw: string): string {
   return raw
+    // Remove null bytes and other control characters that cause UTF-8 issues
+    .replace(/\x00/g, '') // Remove null bytes
+    .replace(/[\x01-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // Remove other control chars
     // Preserve paragraph breaks by keeping double newlines
     .replace(/\r\n\r\n+/g, '\n\n')
     .replace(/\n\n+/g, '\n\n')
