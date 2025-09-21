@@ -118,6 +118,7 @@ export const getProcessingStatus = async (req: Request, res: Response) => {
 
     const result = await db.query(
       `SELECT
+        name,
         metadata->>'processingStatus' as status,
         (SELECT COUNT(*) FROM chunks WHERE resource_id = $1) as chunk_count
        FROM resources
@@ -129,13 +130,14 @@ export const getProcessingStatus = async (req: Request, res: Response) => {
       return res.status(404).json({ message: 'Resource not found' });
     }
 
-    const { status, chunk_count } = result.rows[0];
+    const {name, status, chunk_count } = result.rows[0];
 
     res.json({
-      resourceId: id,
-      status: status || 'pending',
-      chunkCount: parseInt(chunk_count),
-      ready: status === 'completed' && parseInt(chunk_count) > 0
+        resourceId: id,
+        resourceName: name,
+        status: status || 'pending',
+        chunkCount: parseInt(chunk_count),
+        ready: status === 'completed' && parseInt(chunk_count) > 0
     });
 
   } catch (error: any) {
