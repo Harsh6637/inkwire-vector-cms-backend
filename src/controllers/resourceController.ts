@@ -1,20 +1,24 @@
 import { Request, Response } from 'express';
 import db from '../lib/db';
-import { processTextAndInsertChunks, deleteResourceChunks } from '../utils/chunkEmbed';
+import { deleteResourceChunks } from '../utils/chunkEmbed';
+import { processResourceChunksAsync } from '../services/chunkProcessor';
 
 export const createResource = async (req: Request, res: Response) => {
-try {
-const { name, text, publishers, description } = req.body;
+  try {
+    const { name, text, publishers, description } = req.body;
 
-let metadata = {};
-try {
-metadata = typeof req.body.metadata === 'string'
-? JSON.parse(req.body.metadata)
+    let metadata = {};
+    try {
+      metadata = typeof req.body.metadata === 'string'
+        ? JSON.parse(req.body.metadata)
         : req.body.metadata || {};
     } catch (parseError) {
       console.error('Error parsing metadata:', parseError);
       metadata = {};
     }
+
+    // Mark as pending for processing
+    (metadata as any).processingStatus = 'pending';
 
     // Validate required fields
     if (!name || typeof name !== 'string' || name.trim() === '') {
@@ -51,8 +55,7 @@ metadata = typeof req.body.metadata === 'string'
 
     const user = (req as any).user;
 
-    // Insert resource with dedicated columns for publishers and description
-    // Tags remain in metadata JSON
+    // Insert resource WITHOUT processing chunks
     const resourceResult = await db.query(
       `INSERT INTO resources (name, metadata, text_content, user_id, publishers, description)
        VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
@@ -60,17 +63,10 @@ metadata = typeof req.body.metadata === 'string'
     );
 
     const resourceId = resourceResult.rows[0].id;
+    console.log(`[DEBUG] Triggering async chunk processing for resource ${resourceId}`);
+    processResourceChunksAsync(resourceId); // runs in background
 
-    // Process with raw data extraction
-    const { processResourceWithRawData } = require('../utils/rawDataProcessor');
-
-    try {
-      await processResourceWithRawData(resourceId, text, metadata);
-      console.log(`Successfully processed resource ${resourceId}`);
-    } catch (chunkError) {
-      console.error(`Processing failed for resource ${resourceId}:`, chunkError);
-    }
-
+    // Return immediately - NO chunk processing here
     res.status(201).json({
       message: 'Resource created successfully',
       resourceId: resourceId
@@ -82,21 +78,23 @@ metadata = typeof req.body.metadata === 'string'
       message: 'Failed to create resource: ' + (err.message || 'Unknown error')
     });
   }
+
 };
 
 export const getResources = async (req: Request, res: Response) => {
   try {
     const result = await db.query(`
       SELECT
-        id,
-        name,
-        metadata,
-        text_content as content,
-        publishers,
-        description,
-        created_at
-      FROM resources
-      ORDER BY created_at DESC
+        r.id,
+        r.name,
+        r.metadata,
+        r.text_content as content,
+        r.publishers,
+        r.description,
+        r.created_at,
+        (SELECT COUNT(*) FROM chunks c WHERE c.resource_id = r.id) as chunk_count
+      FROM resources r
+      ORDER BY r.created_at DESC
     `);
 
     const transformedResults = result.rows.map((row: any) => ({
@@ -105,10 +103,12 @@ export const getResources = async (req: Request, res: Response) => {
       metadata: row.metadata,
       content: row.content,
       rawData: row.metadata?.rawData,
-      tags: row.metadata?.tags || [], // Tags from metadata
-      publishers: row.publishers || [], // Publishers from dedicated column
-      description: row.description || '', // Description from dedicated column
-      created_at: row.created_at
+      tags: row.metadata?.tags || [],
+      publishers: row.publishers || [],
+      description: row.description || '',
+      created_at: row.created_at,
+      processingStatus: row.metadata?.processingStatus || 'pending',
+      chunkCount: parseInt(row.chunk_count)
     }));
 
     res.json(transformedResults);
@@ -187,7 +187,8 @@ export const getResource = async (req: Request, res: Response) => {
       tags: resource.metadata?.tags || [],
       publishers: resource.publishers || [],
       description: resource.description || '',
-      created_at: resource.created_at
+      created_at: resource.created_at,
+      processingStatus: resource.metadata?.processingStatus || 'pending'
     };
 
     res.json(transformedResult);

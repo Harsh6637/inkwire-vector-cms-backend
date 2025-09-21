@@ -346,23 +346,25 @@ export async function embedQuery(query: string): Promise<number[]> {
 // New function for exact keyword search
 export async function keywordSearch(
   query: string,
-  limit: number = 10,
+  limit: number = 50, // Increased limit to get more results
   userId?: number
 ): Promise<SearchResult[]> {
   try {
     console.log(`🔍 Performing keyword search for: "${query}"`);
-    let whereConditions = ['to_tsvector(\'english\', c.text) @@ plainto_tsquery(\'english\', $1)'];
+
+    // Search in both chunks AND resource metadata
     let queryParams: any[] = [query];
     let paramCount = 1;
 
     if (userId) {
-      whereConditions.push(`r.user_id = $${++paramCount}`);
+      paramCount++;
       queryParams.push(userId);
     }
 
     queryParams.push(limit);
     const limitParam = `$${++paramCount}`;
 
+    // Enhanced query to search in metadata as well
     const results = await db.query(
       `SELECT
         c.id as chunk_id,
@@ -373,34 +375,75 @@ export async function keywordSearch(
         c.token_count,
         r.name as resource_title,
         r.metadata as resource_metadata,
+        r.publishers,
+        r.description,
         r.created_at as resource_created_at,
         0.0 as similarity_score,
-        ts_rank_cd(to_tsvector('english', c.text), plainto_tsquery('english', $1)) as text_rank
+        ts_rank_cd(to_tsvector('english', c.text), plainto_tsquery('english', $1)) as text_rank,
+        ts_rank_cd(to_tsvector('english', r.name), plainto_tsquery('english', $1)) as title_rank,
+        ts_rank_cd(to_tsvector('english', COALESCE(r.description, '')), plainto_tsquery('english', $1)) as desc_rank
       FROM chunks c
       JOIN resources r ON c.resource_id = r.id
-      WHERE ${whereConditions.join(' AND ')}
-      ORDER BY text_rank DESC
+      WHERE
+        to_tsvector('english', c.text) @@ plainto_tsquery('english', $1)
+        OR to_tsvector('english', r.name) @@ plainto_tsquery('english', $1)
+        OR to_tsvector('english', COALESCE(r.description, '')) @@ plainto_tsquery('english', $1)
+        OR LOWER(array_to_string(r.publishers, ' ')) LIKE LOWER('%' || $1 || '%')
+        ${userId ? `AND r.user_id = $2` : ''}
+      ORDER BY
+        CASE
+          WHEN to_tsvector('english', r.name) @@ plainto_tsquery('english', $1) THEN 1
+          WHEN LOWER(array_to_string(r.publishers, ' ')) LIKE LOWER('%' || $1 || '%') THEN 2
+          WHEN to_tsvector('english', COALESCE(r.description, '')) @@ plainto_tsquery('english', $1) THEN 3
+          ELSE 4
+        END,
+        text_rank DESC
       LIMIT ${limitParam}`,
       queryParams
     );
 
     console.log(`✅ Keyword search found ${results.rows.length} results`);
 
-    return results.rows.map((row: any) => ({
-      chunk_id: row.chunk_id,
-      resource_id: row.resource_id,
-      resource_title: row.resource_title,
-      resource_metadata: row.resource_metadata,
-      text: row.text,
-      section_name: row.section_name,
-      similarity_score: 0,
-      text_rank: row.text_rank,
-      final_score: 1.0, // Corrected: Always give a perfect score for a keyword match
-      position: row.position,
-      token_count: row.token_count,
-      resource_created_at: row.resource_created_at,
-      preview: row.text.length > 200 ? row.text.substring(0, 200) + '...' : row.text
-    }));
+    return results.rows.map((row: any) => {
+      // Calculate dynamic score based on where the match occurred
+      let finalScore = 0.5; // Base score
+
+      // Check where the match occurred and adjust score
+      if (row.title_rank > 0) {
+        finalScore = Math.max(finalScore, Math.min(0.95, 0.7 + row.title_rank));
+      } else if (row.desc_rank > 0) {
+        finalScore = Math.max(finalScore, Math.min(0.75, 0.5 + row.desc_rank));
+      } else if (row.text_rank > 0) {
+        finalScore = Math.min(0.65, 0.3 + row.text_rank);
+      }
+
+      // Check for publisher match
+      const queryLower = query.toLowerCase();
+      const publishers = (row.publishers || []).join(' ').toLowerCase();
+      if (publishers.includes(queryLower)) {
+        finalScore = Math.max(finalScore, 0.85);
+      }
+
+      return {
+        chunk_id: row.chunk_id,
+        resource_id: row.resource_id,
+        resource_title: row.resource_title,
+        resource_metadata: {
+          ...row.resource_metadata,
+          publishers: row.publishers,
+          description: row.description
+        },
+        text: row.text,
+        section_name: row.section_name,
+        similarity_score: 0,
+        text_rank: row.text_rank,
+        final_score: finalScore, // Dynamic score instead of always 1.0
+        position: row.position,
+        token_count: row.token_count,
+        resource_created_at: row.resource_created_at,
+        preview: row.text.length > 200 ? row.text.substring(0, 200) + '...' : row.text
+      };
+    });
 
   } catch (error) {
     console.error('Error in keyword search:', error);

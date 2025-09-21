@@ -101,6 +101,14 @@ try {
 }
 
 try {
+  const processingRoutes = require('./routes/processingRoutes').default;
+  app.use(`${API_VERSION}/processing`, processingRoutes);
+  console.log('✅ Processing routes registered');
+} catch (e) {
+  console.error('❌ Failed to register processing routes:', e);
+}
+
+try {
   const searchRoutes = require('./routes/search').default;
   app.use(`${API_VERSION}/search`, searchRoutes);
   console.log('✅ Search routes registered');
